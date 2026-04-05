@@ -14,7 +14,8 @@ Runs eight strategies:
 - **E. Cosine similarity** – near-identical rows on repetitive columns only  
 - **F. Fingerprint gap** – dominant gap between recurring row fingerprints  
 - **G. Collinearity matrix** – column pairs with |r| ≥ 0.98 (explains E false positives)  
-- **H. Modular block count** – counts exact-match row pairs per candidate period; writes `output.pdf` with heatmaps and autocorrelogram  
+- **H. Modular block count** – counts exact-match row pairs per candidate period; writes `output.pdf` with heatmaps and autocorrelogram
+- **I. Excel format forensics** – file-layer analysis independent of data values: internal metadata (creator/modifier/timestamps/revision),...
 
 ### Installation
 
@@ -54,8 +55,10 @@ python copy_paste_finder.py <file.xlsx> \
     [--min-period 50] \
     [--max-period 250] \
     [--max-lag 300] \
-    [--out output.pdf]
+    [--out output.pdf] \
+    [--forensics]
 ```
 
 
-The [entropy calculation](https://github.com/markusenglund/copy-paste-detective?ref=sciencedetective.org) depends on an idea of Markus Eglund and may not be used without his permission. All other modules have been developed during the [PREVENT-TAHA8](https://www.bmj.com/content/391/bmj-2024-083382/rapid-responses) trial as discussed at the [blog](https://www.wjst.de/blog/sciencesurf/2025/11/is-there-a-data-agnostic-method-to-find-repetitive-data-in-clinical-trials/) of the author and are freely available.
+The [entropy calculation](https://github.com/markusenglund/copy-paste-detective?ref=sciencedetective.org) depends on an idea of Markus Eglund and may not be used without his permission.  
+All other modules have been developed during the [PREVENT-TAHA8](https://www.bmj.com/content/391/bmj-2024-083382/rapid-responses) trial as discussed at the [blog](https://www.wjst.de/blog/sciencesurf/2025/11/is-there-a-data-agnostic-method-to-find-repetitive-data-in-clinical-trials/) of the author and are freely available.
