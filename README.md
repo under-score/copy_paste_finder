@@ -9,13 +9,22 @@ Runs eight strategies:
 
 - **A. Duplicate rows** – pairs of rows sharing ≥2 high-entropy values  
 - **B. Repeated column sequences** – same run of values at two positions in a column  
-- **C. Terminal digit test** – per-column χ²(9) uniformity test on last significant digit  
+- **C. Terminal digit test** – per-column uniformity test on last significant digit  
 - **D. Periodic row duplication** – fixed-lag block copying (e.g. every 101 rows)  
 - **E. Cosine similarity** – near-identical rows on repetitive columns only  
 - **F. Fingerprint gap** – dominant gap between recurring row fingerprints  
 - **G. Collinearity matrix** – column pairs with |r| ≥ 0.98 (explains E false positives)  
 - **H. Modular block count** – counts exact-match row pairs per candidate period; writes `output.pdf` with heatmaps and autocorrelogram
 - **I. Excel format forensics** – file-layer analysis independent of data values: internal metadata (creator/modifier/timestamps/revision),...
+
+###  Benchmark files recognized
+```
+  Südhof / Neurexin2 pnas.2300363120.sd01.xlsx 
+  Pruitt / Spider    Dumicola familiarity wide.xlsx
+  Hawk / Owl         Dryad_dataset.xlsx
+  Gino / Tax         Tax_Study_STUDY_1_2010-07-13.xlsx
+  Attar / PREVENT    TAHA8.xlsx
+```
 
 ### Installation
 
@@ -31,7 +40,7 @@ pip install openpyxl matplotlib numpy
 python copy_paste_finder.py <file.xlsx>
 ```
 
-#### With visualization (`output.pdf`)
+#### With visualization
 
 ```bash
 python copy_paste_finder.py <file.xlsx> --plot
