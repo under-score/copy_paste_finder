@@ -20,14 +20,6 @@ Runs nine strategies:
                                and column-identity pairs (one column copied from another).
                                Pages appended to --out PDF when --forensics flag is set.
 
-Benchmark files validated against:
-  Südhof / PNAS    pnas.2300363120.sd01.xlsx          (B HIGH – repeated 492-value column seq, Fig 5)
-  Spider / Pruitt  "Dumicola familiarity wide.xlsx"   (A HIGH – periodic row duplication)
-  Hawk / Owl       Dryad_dataset.xlsx                  (A HIGH – duplicate rows, low false-positive control)
-  Gino / Tax       Tax_Study_STUDY_1_2010-07-13.xlsx  (I HIGH – metadata gap 2010→2019, font anomalies,
-                                                                  integer-ratio excess, #B==$B identity)
-  PREVENT / TAHA8  TAHA8.xlsx                          (H HIGH – period-101 modular copying)
-
 Usage:
     pip install openpyxl matplotlib numpy          # core
     pip install scipy                              # optional: exact χ² p-values for Strategy C
