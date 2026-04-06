@@ -1252,13 +1252,13 @@ def run_strategy_h_plot(
     sheet: SheetData,
     profiles: list[ColumnProfile],
     result: Optional[ModularBlockResult],
-    pdf,                              # open PdfPages object
+    pdf,
     plot_cols: Optional[list[str]],
     min_period: int,
     max_period: int,
     max_lag: int,
 ) -> None:
-    """Append four Strategy H diagnostic pages to an open PdfPages object."""
+    """Append Strategy H diagnostic pages to an open PdfPages object."""
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
@@ -1266,6 +1266,16 @@ def run_strategy_h_plot(
     CMAP = mcolors.TwoSlopeNorm(vmin=-3, vcenter=0, vmax=3)
     data_rows = sheet.rows[1:]
     n = len(data_rows)
+
+    if n == 0:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.text(0.5, 0.5, "Empty sheet: no data rows to plot",
+                ha="center", va="center", transform=ax.transAxes, fontsize=10)
+        ax.set_axis_off()
+        fig.tight_layout()
+        pdf.savefig(fig)
+        plt.close(fig)
+        return
 
     # Determine display columns (all continuous non-binary)
     if plot_cols:
@@ -1281,52 +1291,118 @@ def run_strategy_h_plot(
                 disp_indices.append(ci)
                 disp_names.append(sheet.headers[ci] if ci < len(sheet.headers) else str(ci))
 
-    # Build obs_id-sorted matrix for display
     obs_ids = _h_obs_id_array(sheet)
     order = sorted(range(n), key=lambda i: obs_ids[i])
     obs_sorted = np.array([obs_ids[i] for i in order], dtype=float)
 
-    raw = np.array([
-        [float(data_rows[i][ci]) if ci < len(data_rows[i]) and _is_numeric(data_rows[i][ci])
-         else float("nan") for ci in disp_indices]
-        for i in order
-    ], dtype=float)
+    period = result.period if result else None
 
-    # Z-score column-wise
-    z = np.full_like(raw, np.nan)
-    for ci in range(raw.shape[1]):
-        col = raw[:, ci]
-        valid = col[~np.isnan(col)]
-        if len(valid) > 1:
-            mu, sd = valid.mean(), valid.std()
-            if sd > 0:
-                z[:, ci] = (col - mu) / sd
+    def info_page(title, message):
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.text(0.5, 0.5, message, ha="center", va="center",
+                transform=ax.transAxes, fontsize=10)
+        ax.set_title(title, fontsize=10, pad=8)
+        ax.set_axis_off()
+        fig.tight_layout()
+        pdf.savefig(fig)
+        plt.close(fig)
 
-    def heatmap(ax, z_data, sort_col, title):
+    def heatmap(ax, z_data, sort_col, title, ylabels):
         if sort_col is not None:
             z_data = z_data[np.argsort(sort_col)]
         im = ax.imshow(np.where(np.isnan(z_data), 0.0, z_data).T, aspect="auto",
                        cmap="RdBu_r", norm=CMAP, interpolation="nearest")
-        ax.set_yticks(range(len(disp_names)))
-        ax.set_yticklabels(disp_names, fontsize=7)
+        ax.set_yticks(range(len(ylabels)))
+        ax.set_yticklabels(ylabels, fontsize=7)
         ax.set_xticks([])
         ax.set_title(title, fontsize=10, pad=4)
         plt.colorbar(im, ax=ax, fraction=0.02, pad=0.01, label="Z-score")
 
-    period = result.period if result else None
+    # Build display matrix only if display columns exist
+    if disp_indices:
+        raw = np.array([
+            [float(data_rows[i][ci]) if ci < len(data_rows[i]) and _is_numeric(data_rows[i][ci])
+             else float("nan") for ci in disp_indices]
+            for i in order
+        ], dtype=float).reshape(len(order), len(disp_indices))
 
-    # Autocorrelogram on complete columns (same as used for block count)
+        z = np.full_like(raw, np.nan)
+        for ci in range(raw.shape[1]):
+            col = raw[:, ci]
+            valid = col[~np.isnan(col)]
+            if len(valid) > 1:
+                mu, sd = valid.mean(), valid.std()
+                if sd > 0:
+                    z[:, ci] = (col - mu) / sd
+
+        fig, ax = plt.subplots(figsize=(10, max(4, len(disp_names) * 0.22 + 1)))
+        heatmap(ax, z, None, "Full dataset – sorted by obs_id", disp_names)
+        fig.tight_layout()
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        if period:
+            fig, ax = plt.subplots(figsize=(10, max(4, len(disp_names) * 0.22 + 1)))
+            heatmap(ax, z, obs_sorted % period,
+                    f"Sorted by obs_id mod {period} – copies should align", disp_names)
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+    else:
+        info_page("Strategy H – heatmap",
+                  "No eligible continuous non-binary numeric columns to display.")
+        if period:
+            info_page("Strategy H – mod-period heatmap",
+                      f"Period {period} detected, but no eligible display columns were available.")
+
+    # Page 3: modular block count
+    fig, ax = plt.subplots(figsize=(12, 4))
+    if result and result.counts_by_period:
+        periods_x = [p for p, _ in result.counts_by_period]
+        counts_y  = [c for _, c in result.counts_by_period]
+        ax.bar(periods_x, counts_y, width=1.0, color="#5B9BD5", linewidth=0, alpha=0.8)
+        if period:
+            ax.axvline(period, color="#C0392B", linewidth=1.5, linestyle="--",
+                       label=f"period={period}  n={result.block_count}")
+        if counts_y:
+            top = int(np.argmax(counts_y))
+            ax.annotate(f"p={periods_x[top]}\nn={counts_y[top]}",
+                        xy=(periods_x[top], counts_y[top]),
+                        xytext=(periods_x[top] + (max(periods_x) - min(periods_x)) * 0.02,
+                                counts_y[top]),
+                        fontsize=8, color="#C0392B",
+                        arrowprops=dict(arrowstyle="->", color="#C0392B", lw=0.8))
+    else:
+        ax.text(0.5, 0.5, "No block count computed\n(too few qualifying columns)",
+                ha="center", va="center", transform=ax.transAxes, fontsize=10)
+    ax.set_xlabel("Candidate period (rows)", fontsize=9)
+    ax.set_ylabel("Exact-match row pairs", fontsize=9)
+    ax.set_title("Strategy H – modular block count", fontsize=10, pad=4)
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(fontsize=8, frameon=False)
+    fig.tight_layout()
+    pdf.savefig(fig)
+    plt.close(fig)
+
+    # Autocorrelogram on complete columns
     if plot_cols:
+        header_to_idx = {h: i for i, h in enumerate(sheet.headers)}
         comp_indices = [header_to_idx[c] for c in plot_cols if c in header_to_idx]
     else:
         comp_indices = [ci for ci in disp_indices
                         if sum(1 for row in data_rows if ci < len(row) and _is_numeric(row[ci])) / n >= 0.7]
 
+    if not comp_indices or min(max_lag, n // 2) < 1:
+        info_page("Strategy H – autocorrelogram",
+                  "Not enough qualifying columns or rows to compute autocorrelogram.")
+        return
+
     comp_matrix = np.array([
         [float(data_rows[i][ci]) if ci < len(data_rows[i]) and _is_numeric(data_rows[i][ci])
          else float("nan") for ci in comp_indices]
         for i in order
-    ], dtype=float)
+    ], dtype=float).reshape(len(order), len(comp_indices))
 
     sims = np.zeros(min(max_lag, n // 2))
     for k in range(1, len(sims) + 1):
@@ -1338,43 +1414,6 @@ def run_strategy_h_plot(
                 vals.append(float(np.mean(a[mask] == b[mask])))
         sims[k - 1] = float(np.mean(vals)) if vals else 0.0
 
-    # Page 1: full heatmap sorted by obs_id
-    fig, ax = plt.subplots(figsize=(10, max(4, len(disp_names) * 0.22 + 1)))
-    heatmap(ax, z, None, f"Full dataset – sorted by obs_id")
-    fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
-
-    # Page 2: mod-period heatmap
-    if period:
-        fig, ax = plt.subplots(figsize=(10, max(4, len(disp_names) * 0.22 + 1)))
-        heatmap(ax, z, obs_sorted % period,
-                f"Sorted by obs_id mod {period} – copies should align")
-        fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
-
-    # Page 3: modular block count
-    fig, ax = plt.subplots(figsize=(12, 4))
-    if result:
-        periods_x = [p for p, _ in result.counts_by_period]
-        counts_y  = [c for _, c in result.counts_by_period]
-        ax.bar(periods_x, counts_y, width=1.0, color="#5B9BD5", linewidth=0, alpha=0.8)
-        if period:
-            ax.axvline(period, color="#C0392B", linewidth=1.5, linestyle="--",
-                       label=f"period={period}  n={result.block_count}")
-        top = int(np.argmax(counts_y))
-        ax.annotate(f"p={periods_x[top]}\nn={counts_y[top]}",
-                    xy=(periods_x[top], counts_y[top]),
-                    xytext=(periods_x[top] + (max(periods_x) - min(periods_x)) * 0.02, counts_y[top]),
-                    fontsize=8, color="#C0392B",
-                    arrowprops=dict(arrowstyle="->", color="#C0392B", lw=0.8))
-    else:
-        ax.text(0.5, 0.5, "No block count computed\n(too few qualifying columns)",
-                ha="center", va="center", transform=ax.transAxes, fontsize=10)
-    ax.set_xlabel("Candidate period (rows)", fontsize=9)
-    ax.set_ylabel("Exact-match row pairs", fontsize=9)
-    ax.set_title("Strategy H – modular block count", fontsize=10, pad=4)
-    ax.legend(fontsize=8, frameon=False)
-    fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
-
-    # Page 4: autocorrelogram
     fig, ax = plt.subplots(figsize=(12, 4))
     lags = np.arange(1, len(sims) + 1)
     baseline = float(np.median(sims))
@@ -1383,7 +1422,7 @@ def run_strategy_h_plot(
                label=f"median={baseline:.4f}")
     margin = max((sims.max() - sims.min()) * 0.15, 0.002)
     ax.set_ylim(sims.min() - margin, sims.max() + margin)
-    if period:
+    if period and period > 0:
         for mult in range(1, len(sims) // period + 1):
             lag = period * mult
             if lag <= len(sims):
@@ -1401,10 +1440,13 @@ def run_strategy_h_plot(
     ax.set_title("Strategy H – autocorrelogram on obs_id-sorted data", fontsize=10, pad=4)
     ax.text(0.01, 0.02, f"columns: {len(comp_indices)}",
             transform=ax.transAxes, fontsize=7, color="#888")
-    ax.legend(fontsize=8, frameon=False)
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(fontsize=8, frameon=False)
     ax.set_xlim(0, len(sims) + 1)
-    fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
-
+    fig.tight_layout()
+    pdf.savefig(fig)
+    plt.close(fig)
 
 # ---------------------------------------------------------------------------
 # Strategy I – Excel format forensics (file-layer, not data-layer)
@@ -2151,11 +2193,16 @@ def analyse_file(
                          periodic, cosine, fingerprint, collinearity,
                          modular, min_suspicion)
 
-        # Strategy I: file-level forensics pages (once per file, after all sheets)
+        # Strategy I file-level forensics pages once per file, after all sheets
         if forensics and pdf_obj is not None:
-            i_result = run_strategy_i(path)
-            print_strategy_i(i_result, min_suspicion)
-            write_forensics_pages(i_result, pdf_obj)
+            try:
+                i_result = run_strategy_i(path)
+                print_strategy_i(i_result, min_suspicion)
+                write_forensics_pages(i_result, pdf_obj)
+            except KeyError as e:
+                print(f"Strategy I skipped: malformed XLSX archive ({e})", file=sys.stderr)
+            except Exception as e:
+                print(f"Strategy I skipped due to unexpected error: {e}", file=sys.stderr)
 
     finally:
         if pdf_obj is not None:
